@@ -8,6 +8,9 @@ repository = "https://github.com/RYthaGOD/bam-net"
 keywords = ["solana", "jito", "bam", "validator", "mev"]
 categories = ["api-bindings", "command-line-utilities"]
 readme = "README.md"
+# Keep the published tarball to just the Rust crate: drop the TypeScript
+# phase-0 spike and CI config that only matter inside the repo.
+exclude = ["spike/", ".github/"]
 
 [lib]
 name = "bam_net"
