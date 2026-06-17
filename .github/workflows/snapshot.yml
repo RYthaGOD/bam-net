@@ -1,0 +1,83 @@
+name: snapshot
+
+# Append one timestamped capture of the BAM network to the public history log
+# (data/history.jsonl) on a fixed cadence and commit it back to the repo. Over
+# time this turns the repository itself into an append-only, independently
+# verifiable record of BAM decentralization: stake %, node/validator counts,
+# concentration, and validator<->node churn.
+
+on:
+  schedule:
+    # Every 6 hours, on the hour (UTC). Tune the cadence here — finer = more
+    # churn resolution and more commits; coarser = a smaller log.
+    - cron: "0 */6 * * *"
+  # Manual / API trigger. Lets you capture on demand and backfill after a
+  # missed scheduled run (gh workflow run snapshot.yml).
+  workflow_dispatch:
+
+# The job pushes a commit, so it needs write access to repo contents.
+permissions:
+  contents: write
+
+# Never let two capture runs race on the same push; queue them instead.
+concurrency:
+  group: snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Push the data commits with a Personal Access Token if one is
+          # configured (repo secret SNAPSHOT_TOKEN), else the built-in token.
+          #
+          # Why it matters: GitHub disables scheduled workflows after 60 days
+          # with no repository activity, and commits made by the built-in
+          # GITHUB_TOKEN do NOT reset that timer. A push authenticated with a
+          # real-user PAT counts as activity and keeps the cron alive. Without
+          # the PAT this still works; the schedule just relies on other repo
+          # activity to stay enabled.
+          token: ${{ secrets.SNAPSHOT_TOKEN || github.token }}
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build CLI
+        run: cargo build --release --locked
+
+      - name: Capture snapshot
+        run: ./target/release/bam-net snapshot --cache data/history.jsonl --no-color
+
+      - name: Commit to history log
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/history.jsonl
+          if git diff --staged --quiet; then
+            echo "History log unchanged — nothing to commit."
+            exit 0
+          fi
+          git commit -m "data: BAM snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push
+
+      # If anything above failed (API down, build broke, push rejected), make
+      # the miss visible: open a single tracking issue, or comment on the
+      # existing one, instead of failing silently.
+      - name: Report a failed capture
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Scheduled snapshot capture is failing"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          body="A scheduled BAM snapshot run failed. Run: $run_url"
+          existing=$(gh issue list --state open --search "$title in:title" \
+            --json number,title --jq ".[] | select(.title==\"$title\") | .number" | head -n1)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

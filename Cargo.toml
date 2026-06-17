@@ -9,8 +9,9 @@ keywords = ["solana", "jito", "bam", "validator", "mev"]
 categories = ["api-bindings", "command-line-utilities"]
 readme = "README.md"
 # Keep the published tarball to just the Rust crate: drop the TypeScript
-# phase-0 spike and CI config that only matter inside the repo.
-exclude = ["spike/", ".github/"]
+# phase-0 spike, CI config, and the ever-growing snapshot history log that
+# only matter inside the repo.
+exclude = ["spike/", ".github/", "data/"]
 
 [lib]
 name = "bam_net"

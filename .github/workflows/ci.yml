@@ -3,6 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+    # The snapshot workflow commits data/history.jsonl on a schedule; those
+    # data-only commits don't need a fmt/clippy/build/test run.
+    paths-ignore:
+      - "data/**"
   pull_request:
     branches: [main]
 
