@@ -114,7 +114,10 @@ mod tests {
         assert_eq!(nodes.len(), 2);
         assert_eq!(nodes[0].bam_node, "fra-mainnet-bam-1-tee");
         assert_eq!(nodes[0].connected_validators, 89);
-        assert_eq!(validators[0].bam_node_connection.as_deref(), Some("ewr-mainnet-bam-1-tee"));
+        assert_eq!(
+            validators[0].bam_node_connection.as_deref(),
+            Some("ewr-mainnet-bam-1-tee")
+        );
         assert!((stake.bam_stake_percentage - 32.511).abs() < 1e-9);
     }
 
@@ -128,7 +131,10 @@ mod tests {
 
         assert_eq!(snap.node_count(), 2);
         assert_eq!(snap.validator_count(), 2);
-        assert_eq!(snap.busiest_node().unwrap().bam_node, "fra-mainnet-bam-1-tee");
+        assert_eq!(
+            snap.busiest_node().unwrap().bam_node,
+            "fra-mainnet-bam-1-tee"
+        );
         assert_eq!(snap.validators_for_node("ewr-mainnet-bam-1-tee").count(), 1);
         assert!((snap.total_validator_stake() - (12992991.17 + 3598006.07)).abs() < 1e-6);
     }

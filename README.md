@@ -5,6 +5,7 @@ scheduler nodes, the validators connected to them, and how much of Solana's
 stake runs BAM. Built on the public BAM explorer API so other tools don't have
 to re-scrape it.
 
+[![CI](https://github.com/RYthaGOD/bam-net/actions/workflows/ci.yml/badge.svg)](https://github.com/RYthaGOD/bam-net/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 ![Rust](https://img.shields.io/badge/rust-2021-orange.svg)
 ![Status](https://img.shields.io/badge/status-v0.1-yellow.svg)
@@ -60,10 +61,13 @@ can stand on.
 ## Install
 
 ```bash
-# CLI
+# Install the CLI from crates.io
 cargo install bam-net
 
-# library
+# …or build the CLI straight from source (no crates.io needed)
+cargo install --git https://github.com/RYthaGOD/bam-net
+
+# Add the library to your project
 cargo add bam-net
 ```
 

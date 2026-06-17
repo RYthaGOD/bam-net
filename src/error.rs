@@ -11,7 +11,9 @@ pub enum BamError {
     /// Returned by the (reserved) [`crate::attestation`] module: BAM ordering
     /// attestations are not yet retrievable from any public source. See the
     /// project README, section "Investigation", for details.
-    #[error("BAM ordering attestations have no public source yet (see the bam-net README roadmap)")]
+    #[error(
+        "BAM ordering attestations have no public source yet (see the bam-net README roadmap)"
+    )]
     AttestationsUnavailable,
 }
 

@@ -2,7 +2,7 @@
 
 use bam_net::{BamExplorerClient, NetworkSnapshot, Result};
 use clap::{Parser, Subcommand};
-use owo_colors::{OwoColorize, Style, Stream::Stdout};
+use owo_colors::{OwoColorize, Stream::Stdout, Style};
 
 #[derive(Parser)]
 #[command(
@@ -83,7 +83,10 @@ fn summary(client: &BamExplorerClient, json: bool) -> Result<()> {
     }
 
     banner("BAM Network");
-    row("Stake", &format!("{} SOL", bold(&fmt_sol(snap.stake.bam_stake))));
+    row(
+        "Stake",
+        &format!("{} SOL", bold(&fmt_sol(snap.stake.bam_stake))),
+    );
     row(
         "",
         &format!(
@@ -105,7 +108,10 @@ fn summary(client: &BamExplorerClient, json: bool) -> Result<()> {
         );
     }
     println!();
-    println!("{}", dim("  run `bam-net nodes` or `bam-net validators --top 10` for detail"));
+    println!(
+        "{}",
+        dim("  run `bam-net nodes` or `bam-net validators --top 10` for detail")
+    );
     Ok(())
 }
 
@@ -130,9 +136,9 @@ fn nodes(client: &BamExplorerClient, json: bool) -> Result<()> {
     );
     for n in &nodes {
         println!(
-            "  {}  {}  {}  {}",
+            "  {}  {:>10}  {}  {}",
             purple(&format!("{:<26}", n.bam_node)),
-            format!("{:>10}", n.connected_validators),
+            n.connected_validators,
             bold(&format!("{:>16}", fmt_sol(n.node_stake))),
             bar(n.node_stake / max, 16),
         );
@@ -175,14 +181,21 @@ fn validators(
         println!(
             "  {}  {}  {}  {}",
             v.validator_pubkey,
-            dim(&format!("{:<24}", v.bam_node_connection.as_deref().unwrap_or("-"))),
+            dim(&format!(
+                "{:<24}",
+                v.bam_node_connection.as_deref().unwrap_or("-")
+            )),
             bold(&format!("{:>16}", fmt_sol(v.stake))),
             share(&format!("{:>7.4}%", v.stake_percentage)),
         );
     }
     println!();
     match node {
-        Some(n) => println!("  {} validators on {}", bold(&vs.len().to_string()), purple(&n)),
+        Some(n) => println!(
+            "  {} validators on {}",
+            bold(&vs.len().to_string()),
+            purple(&n)
+        ),
         None => println!(
             "  showing {} of {} validators",
             bold(&vs.len().to_string()),
@@ -202,7 +215,11 @@ fn stake(client: &BamExplorerClient, json: bool) -> Result<()> {
     row("Total", &format!("{} SOL", bold(&fmt_sol(s.bam_stake))));
     row(
         "Network",
-        &format!("{}  {}", bar(s.bam_stake_percentage / 100.0, 28), pct(s.bam_stake_percentage)),
+        &format!(
+            "{}  {}",
+            bar(s.bam_stake_percentage / 100.0, 28),
+            pct(s.bam_stake_percentage)
+        ),
     );
     Ok(())
 }
