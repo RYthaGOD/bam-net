@@ -1,0 +1,12 @@
+# Rust
+/target
+**/*.rs.bk
+# Cargo.lock is committed: this crate ships a binary (CLI), so we want
+# reproducible builds.
+
+# Phase-0 spike (TypeScript)
+**/node_modules
+
+# Editor / OS
+.DS_Store
+*.swp
