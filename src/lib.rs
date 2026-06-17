@@ -26,10 +26,12 @@
 //! capability — see the project README for the investigation behind it.
 
 pub mod attestation;
+pub mod cache;
 pub mod client;
 pub mod error;
 pub mod types;
 
+pub use cache::{Churn, HistoryPoint, SnapshotStore, TimestampedSnapshot, ValidatorMove};
 pub use client::{BamExplorerClient, DEFAULT_BASE_URL};
 pub use error::{BamError, Result};
 pub use types::{BamNode, BamStake, NetworkSnapshot, Validator};

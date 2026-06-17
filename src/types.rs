@@ -41,7 +41,7 @@ pub struct BamStake {
 
 /// A consistent point-in-time view of the BAM network: the three endpoints
 /// fetched together, plus derived queries other tools can build on.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NetworkSnapshot {
     /// Aggregate BAM stake.
     pub stake: BamStake,

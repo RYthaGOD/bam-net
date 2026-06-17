@@ -1,6 +1,8 @@
 //! `bam-net` CLI — peek under the hood of Jito's Block Assembly Marketplace.
 
-use bam_net::{BamExplorerClient, NetworkSnapshot, Result};
+use std::path::PathBuf;
+
+use bam_net::{cache, BamExplorerClient, NetworkSnapshot, Result, SnapshotStore};
 use clap::{Parser, Subcommand};
 use owo_colors::{OwoColorize, Stream::Stdout, Style};
 
@@ -27,6 +29,10 @@ struct Cli {
     #[arg(long, global = true)]
     base_url: Option<String>,
 
+    /// History log file (JSONL). Defaults to $BAM_NET_CACHE or the OS data dir.
+    #[arg(long, global = true, value_name = "PATH")]
+    cache: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -48,6 +54,16 @@ enum Command {
     },
     /// Aggregate BAM stake.
     Stake,
+    /// Capture the current network state into the local history log.
+    Snapshot,
+    /// Show the adoption time series from the history log.
+    History {
+        /// Show only the most recent N captures.
+        #[arg(long)]
+        limit: Option<usize>,
+    },
+    /// Show validator-to-node changes between the two latest captures.
+    Churn,
 }
 
 fn main() -> Result<()> {
@@ -62,11 +78,20 @@ fn main() -> Result<()> {
         None => BamExplorerClient::new(),
     };
 
+    let store = SnapshotStore::new(
+        cli.cache
+            .clone()
+            .unwrap_or_else(SnapshotStore::default_path),
+    );
+
     match cli.command.unwrap_or(Command::Summary) {
         Command::Summary => summary(&client, cli.json)?,
         Command::Nodes => nodes(&client, cli.json)?,
         Command::Validators { node, top } => validators(&client, cli.json, node, top)?,
         Command::Stake => stake(&client, cli.json)?,
+        Command::Snapshot => snapshot(&client, cli.json, &store)?,
+        Command::History { limit } => history(cli.json, &store, limit)?,
+        Command::Churn => churn(cli.json, &store)?,
     }
 
     Ok(())
@@ -222,6 +247,148 @@ fn stake(client: &BamExplorerClient, json: bool) -> Result<()> {
         ),
     );
     Ok(())
+}
+
+fn snapshot(client: &BamExplorerClient, json: bool, store: &SnapshotStore) -> Result<()> {
+    let snap = client.snapshot()?;
+    let record = store.append(&snap)?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&record)?);
+        return Ok(());
+    }
+
+    banner("Snapshot captured");
+    row("Time", &bold(&record.ts));
+    row(
+        "Stake",
+        &format!(
+            "{} SOL  {} of network",
+            bold(&fmt_sol(snap.stake.bam_stake)),
+            pct(snap.stake.bam_stake_percentage),
+        ),
+    );
+    row("Nodes", &bold(&snap.node_count().to_string()));
+    row("Validators", &bold(&snap.validator_count().to_string()));
+    println!();
+    println!(
+        "{}",
+        dim(&format!("  appended to {}", store.path().display()))
+    );
+    Ok(())
+}
+
+fn history(json: bool, store: &SnapshotStore, limit: Option<usize>) -> Result<()> {
+    let records = store.load()?;
+    if records.is_empty() {
+        println!(
+            "{}",
+            dim("  no snapshots yet — run `bam-net snapshot` to capture one")
+        );
+        return Ok(());
+    }
+
+    let mut points = cache::history(&records);
+    if let Some(n) = limit {
+        if points.len() > n {
+            points = points.split_off(points.len() - n);
+        }
+    }
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&points)?);
+        return Ok(());
+    }
+
+    banner("BAM History");
+    println!(
+        "  {}  {}  {}  {}  {}",
+        header(&format!("{:<20}", "TIME (UTC)")),
+        header(&format!("{:>8}", "STAKE %")),
+        header(&format!("{:>6}", "NODES")),
+        header(&format!("{:>11}", "VALIDATORS")),
+        header(&format!("{:>9}", "TOP NODE")),
+    );
+    for p in &points {
+        println!(
+            "  {}  {}  {}  {}  {}",
+            dim(&format!("{:<20}", p.ts)),
+            share(&format!("{:>7.2}%", p.bam_stake_percentage)),
+            bold(&format!("{:>6}", p.node_count)),
+            bold(&format!("{:>11}", p.validator_count)),
+            purple(&format!("{:>8.1}%", p.top_node_share)),
+        );
+    }
+    println!();
+    println!("  {} snapshots", bold(&points.len().to_string()));
+    Ok(())
+}
+
+fn churn(json: bool, store: &SnapshotStore) -> Result<()> {
+    let records = store.load()?;
+    if records.len() < 2 {
+        println!(
+            "{}",
+            dim("  need at least two snapshots — run `bam-net snapshot` again later")
+        );
+        return Ok(());
+    }
+
+    let from = &records[records.len() - 2];
+    let to = &records[records.len() - 1];
+    let result = cache::churn(from, to);
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        return Ok(());
+    }
+
+    banner("BAM Churn");
+    row("From", &dim(&result.from_ts));
+    row("To", &dim(&result.to_ts));
+    println!();
+
+    if result.is_empty() {
+        println!(
+            "{}",
+            dim("  no validator-to-node changes between the last two snapshots")
+        );
+        return Ok(());
+    }
+
+    if !result.moved.is_empty() {
+        println!("  {}", header(&format!("MOVED ({})", result.moved.len())));
+        for m in &result.moved {
+            println!(
+                "    {}  {} → {}",
+                purple(&abbrev(&m.validator_pubkey)),
+                dim(m.from.as_deref().unwrap_or("(none)")),
+                bold(m.to.as_deref().unwrap_or("(none)")),
+            );
+        }
+    }
+    if !result.joined.is_empty() {
+        println!("  {}", header(&format!("JOINED ({})", result.joined.len())));
+        for pk in &result.joined {
+            println!("    {}", purple(&abbrev(pk)));
+        }
+    }
+    if !result.left.is_empty() {
+        println!("  {}", header(&format!("LEFT ({})", result.left.len())));
+        for pk in &result.left {
+            println!("    {}", dim(&abbrev(pk)));
+        }
+    }
+    Ok(())
+}
+
+/// Abbreviate a base58 pubkey for compact display: `AbCdEfGh…WxyZ`.
+fn abbrev(pubkey: &str) -> String {
+    if pubkey.len() <= 16 {
+        pubkey.to_string()
+    } else {
+        format!("{}…{}", &pubkey[..8], &pubkey[pubkey.len() - 4..])
+    }
 }
 
 // ── styling helpers ──────────────────────────────────────────────────────────

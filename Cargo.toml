@@ -1,6 +1,6 @@
 [package]
 name = "bam-net"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Typed, queryable access to Jito BAM network data (nodes, validators, stake) from the public BAM explorer API."
 license = "Apache-2.0"
@@ -24,3 +24,5 @@ reqwest = { version = "0.12", features = ["blocking", "json"] }
 clap = { version = "4", features = ["derive"] }
 owo-colors = { version = "4", features = ["supports-colors"] }
 thiserror = "2"
+# Pure-Rust RFC3339 timestamps for the snapshot history log (no C dependency).
+time = { version = "0.3", features = ["formatting"] }

@@ -8,7 +8,7 @@ to re-scrape it.
 [![CI](https://github.com/RYthaGOD/bam-net/actions/workflows/ci.yml/badge.svg)](https://github.com/RYthaGOD/bam-net/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 ![Rust](https://img.shields.io/badge/rust-2021-orange.svg)
-![Status](https://img.shields.io/badge/status-v0.1-yellow.svg)
+![Status](https://img.shields.io/badge/status-v0.2-yellow.svg)
 
 ```text
 $ bam-net summary
@@ -52,8 +52,11 @@ can stand on.
 - ✅ Ergonomic, coloured CLI (yellow + purple): `summary`, `nodes`,
   `validators`, `stake` — with meters, `--json`, and `--no-color`
 - ✅ Configurable base URL (`--base-url` / `with_base_url`) for tests or mirrors
+- ✅ **Local history log** (append-only JSONL, no database) — `snapshot`,
+  `history`, and `churn` track adoption, stake concentration, and
+  validator↔node movement over time
 - ✅ Offline tests against captured response fixtures
-- ✅ Small footprint — no async runtime required (blocking client)
+- ✅ Small footprint — no async runtime, no C dependencies (blocking client)
 - 🔒 A **reserved `attestation` module** for ordering-attestation verification,
   ready to activate when a public source exists (see
   [Roadmap](#roadmap-and-the-attestation-module))
@@ -83,6 +86,10 @@ bam-net validators --top 20            # top 20 validators by stake
 bam-net validators --node fra-mainnet-bam-1-tee   # filter by node
 bam-net summary --json | jq            # raw JSON for piping
 bam-net --base-url http://localhost:8080/api/v1 nodes   # custom endpoint
+
+bam-net snapshot                       # capture current state into the history log
+bam-net history --limit 30             # adoption over time (last 30 captures)
+bam-net churn                          # validator↔node changes since the last capture
 ```
 
 | Command | Description |
@@ -91,9 +98,41 @@ bam-net --base-url http://localhost:8080/api/v1 nodes   # custom endpoint
 | `nodes` | All BAM nodes with connected-validator counts and stake |
 | `validators [--node N] [--top K]` | Validators, filterable by node, limitable to top K by stake |
 | `stake` | Aggregate BAM stake (SOL and % of network) |
+| `snapshot` | Capture the current network state into the local history log |
+| `history [--limit N]` | Adoption time series from the log (stake %, counts, top-node concentration) |
+| `churn` | Validator↔node changes between the two most recent captures |
 
 Global flags: `--json` (raw JSON output), `--no-color` (disable colour; also
-honours `NO_COLOR`), `--base-url <URL>` (override the API).
+honours `NO_COLOR`), `--base-url <URL>` (override the API), `--cache <PATH>`
+(history log location).
+
+### Tracking history over time
+
+`bam-net` has no daemon — you capture on whatever cadence you like and the log
+accumulates. Each `snapshot` appends one JSON line; `history` and `churn` read
+the log back:
+
+```bash
+# capture once (wire this to cron / Windows Task Scheduler for a time series)
+bam-net snapshot
+
+# later: how has BAM adoption and node concentration moved?
+bam-net history
+
+# which validators changed BAM node, joined, or left since the last capture?
+bam-net churn
+```
+
+The log is plain [JSONL](https://jsonlines.org/) — one record per capture,
+human-readable and easy to post-process:
+
+```text
+{"ts":"2026-06-17T12:00:00Z","stake":{…},"nodes":[…],"validators":[…]}
+```
+
+It lives at `--cache <PATH>`, else `$BAM_NET_CACHE`, else your OS data dir
+(`%APPDATA%\bam-net\history.jsonl` on Windows,
+`~/.local/share/bam-net/history.jsonl` elsewhere).
 
 ## Library usage
 
@@ -131,6 +170,26 @@ fn main() -> bam_net::Result<()> {
 
 `busiest_node()`, `node(name)`, `validators_for_node(name)`,
 `total_validator_stake()`, `validator_count()`, `node_count()`.
+
+### History log
+
+```rust
+use bam_net::{cache, BamExplorerClient, SnapshotStore};
+
+let client = BamExplorerClient::new();
+let store = SnapshotStore::new(SnapshotStore::default_path());
+
+// Append a timestamped capture to the JSONL log.
+store.append(&client.snapshot()?)?;
+
+// Read it back as time series.
+let records = store.load()?;
+let adoption = cache::history(&records);          // Vec<HistoryPoint>
+if let [.., prev, latest] = records.as_slice() {
+    let moved = cache::churn(prev, latest);       // who changed node
+    println!("{} validators moved", moved.moved.len());
+}
+```
 
 ## Data source / API reference
 
@@ -193,9 +252,9 @@ interface.
 
 Planned, in order:
 
-1. **v0.1** — network/adoption data (this release).
-2. **Time-series** — optional local cache (SQLite) to track adoption,
-   validator↔node churn, and stake concentration over time.
+1. ✅ **v0.1** — network/adoption data.
+2. ✅ **v0.2** — local history log (append-only JSONL): `snapshot` / `history` /
+   `churn` for adoption, stake concentration, and validator↔node churn over time.
 3. **Attestations** — activate the `attestation` module against whatever public
    source Jito provides (on-chain program, API, or feed), with signature +
    Merkle-inclusion verification.
@@ -239,6 +298,7 @@ src/
   client.rs       BamExplorerClient (blocking HTTP)
   types.rs        BamNode, Validator, BamStake, NetworkSnapshot (+ tests)
   error.rs        BamError, Result
+  cache.rs        SnapshotStore (JSONL history log) + history/churn queries (+ tests)
   attestation.rs  reserved ordering-attestation interface (stub)
   main.rs         the bam-net CLI
 spike/            archived phase-0 data-path investigation (TypeScript)
