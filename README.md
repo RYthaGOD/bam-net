@@ -11,12 +11,18 @@ to re-scrape it.
 
 ```text
 $ bam-net summary
-BAM network summary
-  BAM stake:   147,653,889.65 SOL (34.69% of network)
-  BAM nodes:   15
-  Validators:  381
-  Busiest:     fra-mainnet-bam-1-tee (89 validators, 25,625,009.41 SOL)
+
+  ⚡ BAM Network
+  ─────────────
+  Stake       148,306,878.87 SOL
+              ██████████░░░░░░░░░░░░░░░░░░  34.85% of network
+  Nodes       15
+  Validators  387
+  Busiest     fra-mainnet-bam-1-tee (90 validators)
 ```
+
+> Output is coloured (yellow + purple) in a terminal, and automatically plain
+> when piped, when `NO_COLOR` is set, or with `--no-color`.
 
 ---
 
@@ -42,7 +48,8 @@ can stand on.
 - ✅ Typed access to all three public BAM explorer endpoints
 - ✅ `NetworkSnapshot` with derived queries (busiest node, validators per node,
   stake totals)
-- ✅ Ergonomic CLI: `summary`, `nodes`, `validators`, `stake`, with `--json`
+- ✅ Ergonomic, coloured CLI (yellow + purple): `summary`, `nodes`,
+  `validators`, `stake` — with meters, `--json`, and `--no-color`
 - ✅ Configurable base URL (`--base-url` / `with_base_url`) for tests or mirrors
 - ✅ Offline tests against captured response fixtures
 - ✅ Small footprint — no async runtime required (blocking client)
@@ -81,7 +88,8 @@ bam-net --base-url http://localhost:8080/api/v1 nodes   # custom endpoint
 | `validators [--node N] [--top K]` | Validators, filterable by node, limitable to top K by stake |
 | `stake` | Aggregate BAM stake (SOL and % of network) |
 
-Global flags: `--json` (raw JSON output), `--base-url <URL>` (override the API).
+Global flags: `--json` (raw JSON output), `--no-color` (disable colour; also
+honours `NO_COLOR`), `--base-url <URL>` (override the API).
 
 ## Library usage
 
