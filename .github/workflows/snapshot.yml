@@ -8,9 +8,9 @@ name: snapshot
 
 on:
   schedule:
-    # Every 6 hours, on the hour (UTC). Tune the cadence here — finer = more
+    # Every 3 hours, on the hour (UTC). Tune the cadence here — finer = more
     # churn resolution and more commits; coarser = a smaller log.
-    - cron: "0 */6 * * *"
+    - cron: "0 */3 * * *"
   # Manual / API trigger. Lets you capture on demand and backfill after a
   # missed scheduled run (gh workflow run snapshot.yml).
   workflow_dispatch:
