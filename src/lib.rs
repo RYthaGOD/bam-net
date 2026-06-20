@@ -32,7 +32,7 @@ pub mod error;
 pub mod types;
 
 pub use cache::{Churn, HistoryPoint, SnapshotStore, TimestampedSnapshot, ValidatorMove};
-pub use client::{BamExplorerClient, DEFAULT_BASE_URL};
+pub use client::{BamExplorerClient, DEFAULT_BASE_URL, DEFAULT_TIMEOUT};
 pub use error::{BamError, Result};
 pub use types::{BamNode, BamStake, NetworkSnapshot, Validator};
 

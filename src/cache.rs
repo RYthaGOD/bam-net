@@ -20,7 +20,7 @@
 //! # Ok::<(), bam_net::BamError>(())
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -127,6 +127,36 @@ impl SnapshotStore {
             records.push(serde_json::from_str(&line)?);
         }
         Ok(records)
+    }
+
+    /// Load only the most recent `n` records (oldest-first within that window).
+    ///
+    /// The whole file is scanned, but only the tail is JSON-parsed — so
+    /// "compare the last two captures" queries like [`churn`] stay cheap as the
+    /// log grows. `n == 0` returns an empty vec.
+    pub fn load_tail(&self, n: usize) -> Result<Vec<TimestampedSnapshot>> {
+        if n == 0 {
+            return Ok(Vec::new());
+        }
+        let file = match fs::File::open(&self.path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(e.into()),
+        };
+        let mut tail: VecDeque<String> = VecDeque::with_capacity(n);
+        for line in BufReader::new(file).lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            if tail.len() == n {
+                tail.pop_front();
+            }
+            tail.push_back(line);
+        }
+        tail.iter()
+            .map(|line| Ok(serde_json::from_str(line)?))
+            .collect()
     }
 }
 
@@ -332,6 +362,32 @@ mod tests {
     fn load_missing_file_is_empty() {
         let store = SnapshotStore::new("does-not-exist-xyz.jsonl");
         assert!(store.load().unwrap().is_empty());
+        assert!(store.load_tail(2).unwrap().is_empty());
+    }
+
+    #[test]
+    fn load_tail_returns_only_the_last_n_in_order() {
+        let path = std::env::temp_dir().join(format!(
+            "bam-net-tail-{}-{}.jsonl",
+            std::process::id(),
+            OffsetDateTime::now_utc().unix_timestamp_nanos()
+        ));
+        let store = SnapshotStore::new(&path);
+        for _ in 0..3 {
+            store
+                .append(&record("", vec![node("a", 1.0)], vec![]).snapshot)
+                .unwrap();
+        }
+
+        let all = store.load().unwrap();
+        let tail = store.load_tail(2).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(all.len(), 3);
+        assert_eq!(tail.len(), 2);
+        // The tail must be the final two records, in capture order.
+        assert_eq!(tail.as_slice(), &all[1..]);
+        assert!(store.load_tail(0).unwrap().is_empty());
     }
 
     #[test]

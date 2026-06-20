@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.0 — 2026-06-20
+
+### Added
+- Per-request HTTP timeout (default 30s) so a stalled connection can no longer
+  hang the CLI or a cron `snapshot`; `BamExplorerClient::with_timeout()` and the
+  exported `DEFAULT_TIMEOUT` make it configurable.
+- Automatic retry (up to 3 attempts, exponential backoff) on transient request
+  failures — timeouts, connection errors, 5xx, and 429.
+- `--csv` output for `nodes`, `validators`, and `history`.
+- `SnapshotStore::load_tail(n)` — read only the most recent `n` records; `churn`
+  now uses it so it no longer parses the whole log to compare the last two.
+
+### Changed
+- The CLI now prints a short, actionable message (instead of reqwest's internal
+  error) for timeouts, connection failures, and 404s, and exits non-zero.
+
 ## 0.2.0 — 2026-06-17
 
 ### Added

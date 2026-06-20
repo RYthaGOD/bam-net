@@ -21,6 +21,10 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
 
+    /// Output CSV instead of formatted text (ignored when --json is set).
+    #[arg(long, global = true)]
+    csv: bool,
+
     /// Disable coloured output (also honours the NO_COLOR env var).
     #[arg(long, global = true)]
     no_color: bool,
@@ -66,7 +70,14 @@ enum Command {
     Churn,
 }
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(e) = run() {
+        eprintln!("{}", friendly_error(&e));
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     let cli = Cli::parse();
 
     if cli.no_color {
@@ -86,15 +97,38 @@ fn main() -> Result<()> {
 
     match cli.command.unwrap_or(Command::Summary) {
         Command::Summary => summary(&client, cli.json)?,
-        Command::Nodes => nodes(&client, cli.json)?,
-        Command::Validators { node, top } => validators(&client, cli.json, node, top)?,
+        Command::Nodes => nodes(&client, cli.json, cli.csv)?,
+        Command::Validators { node, top } => validators(&client, cli.json, cli.csv, node, top)?,
         Command::Stake => stake(&client, cli.json)?,
         Command::Snapshot => snapshot(&client, cli.json, &store)?,
-        Command::History { limit } => history(cli.json, &store, limit)?,
+        Command::History { limit } => history(cli.json, cli.csv, &store, limit)?,
         Command::Churn => churn(cli.json, &store)?,
     }
 
     Ok(())
+}
+
+/// Turn a [`BamError`] into a short, actionable message for the terminal,
+/// rather than leaking reqwest's internal representation.
+fn friendly_error(err: &bam_net::BamError) -> String {
+    use bam_net::BamError;
+    let detail = match err {
+        BamError::Http(e) if e.is_timeout() => {
+            "timed out reaching the BAM explorer API — try again, or raise the timeout".to_string()
+        }
+        BamError::Http(e) if e.is_connect() => {
+            "couldn't connect to the BAM explorer API — check your network or proxy".to_string()
+        }
+        BamError::Http(e) => match e.status().map(|s| s.as_u16()) {
+            Some(404) => {
+                "the BAM explorer API returned 404 — the endpoint may have moved".to_string()
+            }
+            Some(code) => format!("the BAM explorer API returned HTTP {code}"),
+            None => format!("BAM explorer request failed: {e}"),
+        },
+        other => other.to_string(),
+    };
+    format!("error: {detail}")
 }
 
 // ── commands ────────────────────────────────────────────────────────────────
@@ -140,12 +174,23 @@ fn summary(client: &BamExplorerClient, json: bool) -> Result<()> {
     Ok(())
 }
 
-fn nodes(client: &BamExplorerClient, json: bool) -> Result<()> {
+fn nodes(client: &BamExplorerClient, json: bool, csv: bool) -> Result<()> {
     let mut nodes = client.nodes()?;
     nodes.sort_by(|a, b| b.node_stake.total_cmp(&a.node_stake));
 
     if json {
         println!("{}", serde_json::to_string_pretty(&nodes).unwrap());
+        return Ok(());
+    }
+
+    if csv {
+        println!("bam_node,region,connected_validators,node_stake");
+        for n in &nodes {
+            println!(
+                "{},{},{},{}",
+                n.bam_node, n.region, n.connected_validators, n.node_stake
+            );
+        }
         return Ok(());
     }
 
@@ -176,6 +221,7 @@ fn nodes(client: &BamExplorerClient, json: bool) -> Result<()> {
 fn validators(
     client: &BamExplorerClient,
     json: bool,
+    csv: bool,
     node: Option<String>,
     top: Option<usize>,
 ) -> Result<()> {
@@ -191,6 +237,20 @@ fn validators(
 
     if json {
         println!("{}", serde_json::to_string_pretty(&vs).unwrap());
+        return Ok(());
+    }
+
+    if csv {
+        println!("validator_pubkey,bam_node_connection,stake,stake_percentage");
+        for v in &vs {
+            println!(
+                "{},{},{},{}",
+                v.validator_pubkey,
+                v.bam_node_connection.as_deref().unwrap_or(""),
+                v.stake,
+                v.stake_percentage
+            );
+        }
         return Ok(());
     }
 
@@ -278,7 +338,7 @@ fn snapshot(client: &BamExplorerClient, json: bool, store: &SnapshotStore) -> Re
     Ok(())
 }
 
-fn history(json: bool, store: &SnapshotStore, limit: Option<usize>) -> Result<()> {
+fn history(json: bool, csv: bool, store: &SnapshotStore, limit: Option<usize>) -> Result<()> {
     let records = store.load()?;
     if records.is_empty() {
         println!(
@@ -297,6 +357,22 @@ fn history(json: bool, store: &SnapshotStore, limit: Option<usize>) -> Result<()
 
     if json {
         println!("{}", serde_json::to_string_pretty(&points)?);
+        return Ok(());
+    }
+
+    if csv {
+        println!("ts,bam_stake,bam_stake_percentage,node_count,validator_count,top_node_share");
+        for p in &points {
+            println!(
+                "{},{},{},{},{},{}",
+                p.ts,
+                p.bam_stake,
+                p.bam_stake_percentage,
+                p.node_count,
+                p.validator_count,
+                p.top_node_share
+            );
+        }
         return Ok(());
     }
 
@@ -325,7 +401,9 @@ fn history(json: bool, store: &SnapshotStore, limit: Option<usize>) -> Result<()
 }
 
 fn churn(json: bool, store: &SnapshotStore) -> Result<()> {
-    let records = store.load()?;
+    // churn only compares the two most recent captures, so read just the tail
+    // rather than parsing the whole (ever-growing) log.
+    let records = store.load_tail(2)?;
     if records.len() < 2 {
         println!(
             "{}",
@@ -334,8 +412,8 @@ fn churn(json: bool, store: &SnapshotStore) -> Result<()> {
         return Ok(());
     }
 
-    let from = &records[records.len() - 2];
-    let to = &records[records.len() - 1];
+    let from = &records[0];
+    let to = &records[1];
     let result = cache::churn(from, to);
 
     if json {

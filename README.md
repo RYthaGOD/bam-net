@@ -8,7 +8,7 @@ to re-scrape it.
 [![CI](https://github.com/RYthaGOD/bam-net/actions/workflows/ci.yml/badge.svg)](https://github.com/RYthaGOD/bam-net/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 ![Rust](https://img.shields.io/badge/rust-2021-orange.svg)
-![Status](https://img.shields.io/badge/status-v0.2-yellow.svg)
+![Status](https://img.shields.io/badge/status-v0.3-yellow.svg)
 
 ```text
 $ bam-net summary
@@ -50,7 +50,9 @@ can stand on.
 - ✅ `NetworkSnapshot` with derived queries (busiest node, validators per node,
   stake totals)
 - ✅ Ergonomic, coloured CLI (yellow + purple): `summary`, `nodes`,
-  `validators`, `stake` — with meters, `--json`, and `--no-color`
+  `validators`, `stake` — with meters, `--json`, `--csv`, and `--no-color`
+- ✅ Resilient by default — per-request timeout + automatic retry on transient
+  failures, so it's safe to run unattended (cron / Task Scheduler)
 - ✅ Configurable base URL (`--base-url` / `with_base_url`) for tests or mirrors
 - ✅ **Local history log** (append-only JSONL, no database) — `snapshot`,
   `history`, and `churn` track adoption, stake concentration, and
@@ -102,9 +104,18 @@ bam-net churn                          # validator↔node changes since the last
 | `history [--limit N]` | Adoption time series from the log (stake %, counts, top-node concentration) |
 | `churn` | Validator↔node changes between the two most recent captures |
 
-Global flags: `--json` (raw JSON output), `--no-color` (disable colour; also
-honours `NO_COLOR`), `--base-url <URL>` (override the API), `--cache <PATH>`
-(history log location).
+Global flags: `--json` (raw JSON output), `--csv` (CSV output for `nodes`,
+`validators`, and `history`), `--no-color` (disable colour; also honours
+`NO_COLOR`), `--base-url <URL>` (override the API), `--cache <PATH>` (history
+log location).
+
+```bash
+bam-net nodes --csv > nodes.csv          # straight into a spreadsheet / pandas
+bam-net history --csv | column -t -s,    # the adoption time series as CSV
+```
+
+Requests time out after 30s and retry transient failures (timeouts, connection
+errors, 5xx, 429) up to three times, so the CLI is safe to wire into cron.
 
 ### Tracking history over time
 
@@ -255,10 +266,12 @@ Planned, in order:
 1. ✅ **v0.1** — network/adoption data.
 2. ✅ **v0.2** — local history log (append-only JSONL): `snapshot` / `history` /
    `churn` for adoption, stake concentration, and validator↔node churn over time.
-3. **Attestations** — activate the `attestation` module against whatever public
+3. ✅ **v0.3** — resilience + interop: per-request timeout, automatic retry on
+   transient failures, `--csv` output, and friendlier CLI errors.
+4. **Attestations** — activate the `attestation` module against whatever public
    source Jito provides (on-chain program, API, or feed), with signature +
    Merkle-inclusion verification.
-4. **Thin read API** — optional `axum` service exposing the snapshot + history
+5. **Thin read API** — optional `axum` service exposing the snapshot + history
    so non-Rust tools can consume it.
 
 ## Note for the BAM / Jito team

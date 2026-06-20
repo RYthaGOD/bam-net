@@ -9,6 +9,8 @@
 
 # Demo media (screencast assets / renders) — never push these to the repo
 /media
+# Promo video project + renders (Remotion) — local only, keep out of the repo
+/promo-video
 
 # Editor / OS
 .DS_Store
