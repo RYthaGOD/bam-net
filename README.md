@@ -44,6 +44,22 @@ It is intended as a building block — the open data layer other BAM tooling
 (dashboards, validator-selection tools, decentralization research, alerting)
 can stand on.
 
+### What it is used for
+
+`bam-net` is the collector behind
+**[BAMservatory](https://rythagod.github.io/bamservatory/)**, an independent
+transparency layer for BAM. Three instances run continuously in US-East,
+Singapore and Amsterdam, capturing every 60 seconds, and their raw output is
+published day by day — each hashed — at
+[bamservatory-data](https://github.com/RYthaGOD/bamservatory-data), so every
+figure on that dashboard can be recomputed from the captures behind it.
+
+**The published crate is the collector that produced that archive.** `v0.3.0` on
+crates.io is byte-identical to the commit pinned in BAMservatory's build: the
+several hundred commits since the release are captured data and CI, not source.
+`cargo install bam-net` therefore gives you the same binary, and anyone
+reproducing the archive runs the same code rather than something merely similar.
+
 ## Features
 
 - ✅ Typed access to all three public BAM explorer endpoints
@@ -121,10 +137,19 @@ errors, 5xx, 429) up to three times, so the CLI is safe to wire into cron.
 
 `bam-net` has no daemon — you capture on whatever cadence you like and the log
 accumulates. Each `snapshot` appends one JSON line; `history` and `churn` read
-the log back:
+the log back.
+
+Two things are worth knowing before running this continuously, both learned the
+hard way. The log is append-only and grows about 48 MB a day at 60-second
+resolution, and `churn` scans it to reach its last two records — so past a
+gigabyte each capture starts outrunning a one-minute schedule, and captures are
+silently dropped rather than delayed. Rotate the log, and measure achieved
+coverage rather than assuming the schedule was met: BAMservatory's own collector
+decayed to a third of its intended rate this way, and nothing looked wrong until
+per-day capture counts were plotted weeks later.
 
 ```bash
-# capture once (wire this to cron / Windows Task Scheduler for a time series)
+# capture once — drive this from whatever scheduler you already run
 bam-net snapshot
 
 # later: how has BAM adoption and node concentration moved?
